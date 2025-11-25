@@ -385,7 +385,7 @@ def plot_triangulation(points, triangles, segments=None,
 
 
 # ============================================================
-# 8. Gera as quatro figuras (evolucao)
+# 8. Gera as figuras (evolucao)
 # ============================================================
 
 def generate_all():
