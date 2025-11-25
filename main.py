@@ -25,7 +25,6 @@ def generate_lake_polygon(n_boundary=80, seed=1):
     poly /= scale
     return poly  # array (m,2)
 
-
 # ============================================================
 # 2. Pontos dentro do poligono (teste ponto-no-poligono)
 # ============================================================
@@ -44,7 +43,6 @@ def point_in_polygon(pt, poly):
                 inside = not inside
     return inside
 
-
 def sample_points_in_polygon(poly, n_points, seed=1):
     rng = np.random.default_rng(seed)
     xs_min, ys_min = poly.min(axis=0)
@@ -57,7 +55,6 @@ def sample_points_in_polygon(poly, n_points, seed=1):
             pts.append((x, y))
     return np.array(pts)
 
-
 # ============================================================
 # 3. Delaunay via SciPy + utilidades geometricas
 # ============================================================
@@ -67,10 +64,8 @@ def delaunay_triangulation(points):
     tri = Delaunay(pts)
     return tri.simplices.tolist()   # lista de triangulos (i,j,k)
 
-
 def orient(a, b, c):
     return (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0])
-
 
 def segments_intersect(p1, p2, p3, p4):
     def on_segment(a, b, c):
@@ -90,7 +85,6 @@ def segments_intersect(p1, p2, p3, p4):
 
     return (o1 > 0) != (o2 > 0) and (o3 > 0) != (o4 > 0)
 
-
 def circumcircle(p1, p2, p3):
     ax, ay = p1
     bx, by = p2
@@ -109,7 +103,6 @@ def circumcircle(p1, p2, p3):
           cx2cy2 * (bx - ax)) / d
     r2 = (ux - ax) ** 2 + (uy - ay) ** 2
     return ux, uy, r2
-
 
 def triangle_geom(pts, tri):
     a, b, c = tri
@@ -134,7 +127,6 @@ def triangle_geom(pts, tri):
     angC = angle(ab, bc, ca)
     return area, min(angA, angB, angC), max(ab, bc, ca)
 
-
 def triangle_circumcenter(pts, tri):
     a, b, c = tri
     res = circumcircle(pts[a], pts[b], pts[c])
@@ -142,7 +134,6 @@ def triangle_circumcenter(pts, tri):
         return (pts[a] + pts[b] + pts[c]) / 3.0
     cx, cy, _ = res
     return np.array([cx, cy])
-
 
 # ============================================================
 # 4. Recuperacao de restricoes (CDT leve)
@@ -157,7 +148,6 @@ def build_edge_to_tris(tris):
             edge_to_tris.setdefault(key, []).append(idx)
     return edge_to_tris
 
-
 def segment_in_triangulation(seg, tris):
     a, b = seg
     for t in tris:
@@ -165,7 +155,6 @@ def segment_in_triangulation(seg, tris):
         if a in s and b in s:
             return True
     return False
-
 
 def recover_constraints(points, triangles, segments, max_iters=200):
     pts = np.asarray(points)
@@ -216,7 +205,6 @@ def recover_constraints(points, triangles, segments, max_iters=200):
 
     return tris
 
-
 # ============================================================
 # 5. Selecionar triangulos "ruins" + encroachment
 # ============================================================
@@ -241,7 +229,6 @@ def get_bad_triangles(pts, tris, min_angle_deg, poly, max_bad=None):
         indices = indices[:max_bad]
     return indices
 
-
 def find_encroached_segment(candidate_point, pts, segments):
     for (a, b) in segments:
         pa, pb = pts[a], pts[b]
@@ -251,7 +238,6 @@ def find_encroached_segment(candidate_point, pts, segments):
         if d2 < r2 - 1e-10:
             return (a, b)
     return None
-
 
 # ============================================================
 # 6. Refinamento tipo Chew e Ruppert (poucas iteracoes)
@@ -284,7 +270,6 @@ def chew_refinement(points, segments, poly,
     tris = delaunay_triangulation(pts)
     tris = recover_constraints(pts, tris, segs)
     return pts, tris
-
 
 def ruppert_refinement(points, segments, poly,
                        min_angle_deg=28.0, iterations=3, max_new_each=40):
@@ -338,7 +323,6 @@ def ruppert_refinement(points, segments, poly,
     tris = recover_constraints(pts, tris, segs)
     return pts, tris, segs
 
-
 # ============================================================
 # 7. Plot
 # ============================================================
@@ -383,7 +367,6 @@ def plot_triangulation(points, triangles, segments=None,
     fig.savefig(filename, dpi=200)
     plt.close(fig)
 
-
 # ============================================================
 # 8. Gera as figuras (evolucao)
 # ============================================================
@@ -405,6 +388,8 @@ def generate_all():
     plot_triangulation(points, tris1, segments=None, poly=None,
                        filename="lake_delaunay_sem_restricao.png",
                        title="Delaunay sem restricao")
+
+    check_delaunay(points, tris1)
 
     # 2) Delaunay com restricoes (CDT aproximada)
     tris2 = recover_constraints(points, tris1, segments)
@@ -434,6 +419,35 @@ def generate_all():
                        filename="lake_refinamento_ruppert.png",
                        title="Refinamento tipo Ruppert")
 
+# ============================================================
+# 9. Teste
+# ============================================================
+
+def check_delaunay(points, triangles, tol=1e-10):
+    pts = np.asarray(points, float)
+    ok = True
+    for t_idx, (i, j, k) in enumerate(triangles):
+        p1, p2, p3 = pts[i], pts[j], pts[k]
+        cc = circumcircle(p1, p2, p3)
+        if cc is None:
+            # triângulo quase degenerado; ignora
+            continue
+        cx, cy, r2 = cc
+        for p_idx, p in enumerate(pts):
+            if p_idx in (i, j, k):
+                continue
+            dx = p[0] - cx
+            dy = p[1] - cy
+            d2 = dx * dx + dy * dy
+            if d2 < r2 - tol:  # ponto estritamente dentro do círculo
+                print(f"Violacao em triangulo {t_idx}, ponto {p_idx}")
+                ok = False
+                break
+    if ok:
+        print("Triangulacao satisfaz o criterio de Delaunay (dentro do tol).")
+    else:
+        print("Ha violacoes do criterio de Delaunay.")
+    return ok
 
 if __name__ == "__main__":
     generate_all()
