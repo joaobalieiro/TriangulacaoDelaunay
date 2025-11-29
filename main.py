@@ -1,13 +1,13 @@
 import math
 import numpy as np
-from scipy.spatial import Delaunay
 import matplotlib.pyplot as plt
 import matplotlib.tri as mtri
-
+from scipy.spatial import ConvexHull
 
 # ============================================================
 # 1. Gerar um poligono irregular que imita um "lago"
 # ============================================================
+
 
 def generate_lake_polygon(n_boundary=80, seed=1):
     rng = np.random.default_rng(seed)
@@ -60,13 +60,48 @@ def sample_points_in_polygon(poly, n_points, seed=1):
 
 
 # ============================================================
-# 3. Delaunay via SciPy + utilidades geometricas
+# 3. Delaunay via Parabolic Lifting + utilidades geometricas
 # ============================================================
 
+def parabolic_lifting(points):
+    """
+    Aplica o lifting parabolico:
+        (x, y) -> (x, y, x^2 + y^2)
+    aos pontos 2D.
+
+    points: array (N, 2)
+    retorna: array (N, 3)
+    """
+    pts = np.asarray(points, dtype=float)
+    x = pts[:, 0]
+    y = pts[:, 1]
+    z = x * x + y * y
+    lifted = np.column_stack([x, y, z])
+    return lifted
+
+
 def delaunay_triangulation(points):
-    pts = np.asarray(points, float)
-    tri = Delaunay(pts)
-    return tri.simplices.tolist()  # lista de triangulos (i,j,k)
+    """
+    Constroi a triangulacao de Delaunay em 2D usando o
+    Parabolic Lifting Map + convex hull em 3D.
+
+    points: array (N, 2)
+    retorna: lista de triangulos (i, j, k) em termos dos indices dos pontos originais.
+    """
+    pts2d = np.asarray(points, dtype=float)               # pontos no plano
+    pts3d = parabolic_lifting(pts2d)                      # lifting para o parabolide
+
+    hull = ConvexHull(pts3d)                              # casco convexo em R^3
+
+    triangles = []
+
+    for simplex, eq in zip(hull.simplices, hull.equations):
+        a, b, c, d = eq
+        if c < 0:                    # seleciona apenas as faces do lower hull
+            i, j, k = simplex
+            triangles.append((int(i), int(j), int(k)))
+
+    return triangles
 
 
 def orient(a, b, c):
